@@ -1,0 +1,277 @@
+<!--
+LUXVEN CAREERS - ALL IN ONE FILE
+Ei ekta file-i shob. Netlify-te eta "index.html" naam diye upload koro.
+
+SETUP (shudhu ekbar):
+1. console.firebase.google.com -> Create project -> Add Web app -> config copy kore niche CFG-te boshao.
+2. Authentication -> Email/Password enable -> Users -> Add user: tomar OWNER email + password (eta main admin).
+3. Firestore Database -> Create -> Rules tab-e niche "FIRESTORE RULES" paste kore Publish koro.
+4. Firebase Storage lagbe na (free thakbe). CV ar poster image Firestore-ei save hoy.
+5. Rules-e AND niche script-er OWNER-e luxven_job@luxven.com bodle tomar OWNER email dao (duita jaygay same email).
+6. Authentication -> Settings -> Authorized domains-e Netlify domain add koro.
+7. GitHub repo-te ei file upload -> Netlify "Import from GitHub" -> publish directory "." -> Deploy.
+8. yoursite.netlify.app/#/admin -> OWNER email diye login -> Staff tab theke notun admin/moderator banao.
+
+ROLES:
+- Owner/Admin: shob kichu (jobs, promo, settings, staff, shob application, delete).
+- Moderator: job dekhte parbe, application dekhte parbe, Under Review / Shortlisted / Interview / Rejected korte parbe. Selected, delete, settings, promo, staff parbe na.
+- Moderator-er Rejected application admin abar dekhte o change korte parbe. Rejected application 10 din por auto delete (CV shoho), jokhon kono admin panel kholbe.
+
+===== FIRESTORE RULES =====
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function owner() { return signed() && request.auth.token.email == 'luxven_job@luxven.com'; }  // CHANGE
+    function sdoc() { return /databases/$(database)/documents/staff/$(request.auth.uid); }
+    function admin() { return owner() || (signed() && exists(sdoc()) && get(sdoc()).data.role == 'admin'); }
+    function mod() { return signed() && exists(sdoc()) && get(sdoc()).data.role == 'moderator'; }
+    function staff() { return admin() || mod(); }
+    function modOpen(r) { return r.data.status in ['Application Received','Under Review','Shortlisted','Interview']; }
+    function modNew(r) { return r.data.status in ['Under Review','Shortlisted','Interview','Rejected']; }
+
+    match /staff/{u} {
+      allow get: if signed() && (request.auth.uid == u || admin());
+      allow list: if admin();
+      allow write: if admin();
+    }
+    match /settings/{d} { allow read: if true; allow write: if admin(); }
+    match /promos/{d} { allow read: if true; allow write: if admin(); }
+    match /jobs/{d} {
+      allow get: if resource.data.status in ['published','closed'] || staff();
+      allow list: if staff() || resource.data.status in ['published','closed'];
+      allow write: if admin();
+    }
+    match /applications/{id} {
+      allow create: if id.matches('LX-[0-9]{4}-[0-9]{5}')
+        && request.resource.data.name is string && request.resource.data.name.size() > 1 && request.resource.data.name.size() < 100
+        && request.resource.data.phone.matches('01[0-9]{9}') && request.resource.data.whatsapp.matches('01[0-9]{9}')
+        && request.resource.data.status == 'Application Received'
+        && request.resource.data.cvPath.matches('cv/.*');
+      allow read: if staff();
+      allow update: if admin() || (mod() && modOpen(resource) && modNew(request.resource)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','reasonSel','reasonOther','interview','notes','rejectedAt','rejectedBy']));
+      allow delete: if admin();
+    }
+    match /tracking/{id} {
+      allow get: if true;
+      allow create: if id.matches('LX-[0-9]{4}-[0-9]{5}') && request.resource.data.status == 'Application Received';
+      allow update: if admin() || (mod() && modOpen(resource) && modNew(request.resource)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','reason','interview']));
+      allow delete: if admin();
+    }
+    match /counters/{y} {
+      allow get: if true;
+      allow create: if request.resource.data.n == 1;
+      allow update: if request.resource.data.n == resource.data.n + 1;
+    }
+    match /cvs/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['data','name','type','at']) && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
+      allow read: if staff();
+      allow delete: if admin();
+    }
+    match /dup/{k} { allow get: if true; allow create: if true; }
+  }
+}
+
+-->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LUXVEN Careers</title><meta name="description" content="Official LUXVEN careers. Feel the premium.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f6f4;--fg:#0b0b0b;--m:#6d6d6d;--c:#fff;--l:#e4e4e1;--ch:#2a2a2a}
+*{box-sizing:border-box;margin:0}html{scroll-behavior:smooth}
+body{font:400 16px/1.6 Manrope,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--fg);padding-top:env(safe-area-inset-top)}
+a{color:inherit}.w{max-width:1100px;margin:0 auto;padding:0 20px}.s{padding:72px 0}
+h1{font-size:clamp(40px,8vw,84px);line-height:1;letter-spacing:-.04em;font-weight:800}h2{font-size:clamp(26px,4vw,40px);letter-spacing:-.03em;margin-bottom:24px}h3{font-size:19px}
+.m{color:var(--m)}.sm{font-size:14px}
+nav{position:sticky;top:0;z-index:9;background:rgba(246,246,244,.8);backdrop-filter:blur(16px);border-bottom:1px solid var(--l)}
+nav .w{display:flex;justify-content:space-between;align-items:center;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.14em;text-decoration:none}.logo svg{width:28px}
+nav a.t{font-size:14px;font-weight:700;text-decoration:none;margin-left:18px}
+.b{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 28px;border-radius:99px;background:var(--fg);color:#fff;font:700 14px Manrope;letter-spacing:.08em;border:0;cursor:pointer;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.b:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.25)}.b.o{background:transparent;color:var(--fg);border:1.5px solid var(--fg)}.b.sm{min-height:40px;padding:0 16px;font-size:12px}.b.r{background:#b3261e}
+.hero{min-height:88vh;display:grid;align-items:center;overflow:hidden}.hero .w{display:grid;gap:40px;grid-template-columns:1.1fr .9fr;align-items:center}
+.stage{perspective:1000px;height:380px;display:grid;place-items:center}.rig{position:relative;width:300px;height:300px;transform-style:preserve-3d;transition:transform .15s}
+.gl{position:absolute;border-radius:28px;background:rgba(255,255,255,.55);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.9);box-shadow:0 30px 60px rgba(0,0,0,.14);animation:fl 6s ease-in-out infinite}
+.g1{inset:0;transform:translateZ(0)}.g2{width:150px;height:150px;right:-40px;top:-30px;transform:translateZ(80px);animation-delay:-2s;background:rgba(10,10,10,.92)}.g3{width:120px;height:120px;left:-30px;bottom:-20px;transform:translateZ(60px);animation-delay:-4s}
+.rig .cr{position:absolute;inset:0;display:grid;place-items:center;transform:translateZ(50px)}.cr svg{width:150px}
+@keyframes fl{50%{translate:0 -14px}}@media(prefers-reduced-motion:reduce){.gl{animation:none}}
+.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
+.card{background:var(--c);border:1px solid var(--l);border-radius:24px;padding:26px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.job{display:flex;flex-direction:column;gap:14px;transition:transform .25s,box-shadow .25s}.job:hover{transform:translateY(-4px);box-shadow:0 20px 40px rgba(0,0,0,.08)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}.kv span:nth-child(odd){color:var(--m)}
+.pill{display:inline-block;padding:3px 12px;border-radius:99px;font-size:12px;font-weight:700;background:#e9f5ec;color:#16632a}.pill.c{background:#eee;color:#555}.pill.x{background:#fde8e6;color:#b3261e}
+.promo{background:var(--fg);color:#fff;border-radius:28px;padding:36px;display:grid;gap:20px;grid-template-columns:1fr auto;align-items:center;margin-bottom:18px;background-size:cover;background-position:center}
+.promo h2{color:#fff;margin:6px 0}.promo.i{box-shadow:inset 0 0 0 999px rgba(0,0,0,.55)}.promo .b{background:#fff;color:#000}
+label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}input,select,textarea{width:100%;min-height:50px;padding:12px 16px;border:1px solid #cfcfcb;border-radius:14px;font:inherit;background:#fff}input[type=checkbox]{width:22px;min-height:22px}
+input:focus,select:focus,textarea:focus,.b:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.ban{background:#fff;border:1px solid var(--l);border-left:4px solid var(--fg);border-radius:14px;padding:16px 20px;margin-bottom:28px}
+.sec{margin-top:32px}.sec ul{padding-left:20px}.sec li{margin:4px 0}.sec p{white-space:pre-line}
+.tl{list-style:none;padding:0;margin:24px 0}.tl li{position:relative;padding:0 0 26px 40px;color:var(--m)}.tl li:before{content:"";position:absolute;left:0;top:2px;width:22px;height:22px;border-radius:50%;border:2px solid var(--l);background:#fff}
+.tl li:after{content:"";position:absolute;left:10px;top:26px;bottom:0;width:2px;background:var(--l)}.tl li:last-child:after{display:none}
+.tl .d{color:var(--fg);font-weight:700}.tl .d:before{background:var(--fg);border-color:var(--fg)}.tl .d:after{background:var(--fg)}.tl .x{color:#b3261e;font-weight:700}.tl .x:before{background:#b3261e;border-color:#b3261e}
+.err{color:#b3261e;font-weight:700;margin-top:12px}.hp{position:absolute;left:-9999px}
+footer{border-top:1px solid var(--l);padding:48px 0 calc(32px + env(safe-area-inset-bottom));margin-top:40px}footer .w{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between}
+.tabs{display:flex;gap:8px;overflow-x:auto;margin-bottom:24px}.tabs .b{flex:none}
+.st{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}.st .card{padding:18px}.st b{font-size:30px;display:block}
+details.card{margin-bottom:12px}summary{cursor:pointer;font-weight:700;display:flex;justify-content:space-between;gap:10px}
+.row{display:grid;gap:14px;grid-template-columns:1fr 1fr}.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+@media(max-width:800px){.hero .w{grid-template-columns:1fr}.stage{height:300px;order:-1}.rig{width:220px;height:220px}.s{padding:48px 0}.promo{grid-template-columns:1fr;padding:26px}.row{grid-template-columns:1fr}.g2{width:100px;height:100px}}
+
+#sp{position:fixed;inset:0;z-index:99;background:#fff;display:grid;place-items:center;text-align:center;padding:24px;transition:transform .6s cubic-bezier(.77,0,.18,1);cursor:pointer}
+#sp.out{transform:translateY(-100%)}
+#sp .t1{font-weight:800;font-size:clamp(34px,7vw,64px);letter-spacing:-.03em;opacity:0;animation:up .6s .1s forwards}
+#sp .t2{margin-top:8px;color:#6d6d6d;font-size:15px;opacity:0;animation:up .6s .4s forwards}
+#sp .ln{width:0;height:2px;background:#0b0b0b;margin:22px auto 0;animation:ln .8s .6s forwards}
+@keyframes rv{to{clip-path:inset(0)}}@keyframes up{from{transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes ln{to{width:min(60vw,220px)}}
+@media(prefers-reduced-motion:reduce){#sp .t1,#sp .t2{animation-duration:.01s;animation-delay:0s}}
+</style></head><body>
+<div id="sp" role="presentation"><div><p class="t1">We are hiring.</p><p class="t2">Join the LUXVEN team. Open positions now available.</p><div class="ln"></div></div></div><nav><div class="w"><a class="logo" href="#/"><svg viewBox="0 0 60 40"><path d="M6 16l8 20h32l8-20-14 10L30 6 20 26z" fill="currentColor"/></svg>LUXVEN</a><div><a class="t" href="#/">Jobs</a><a class="t" href="#/track">Check status</a></div></div></nav>
+<main id="app"></main><footer id="foot"></footer>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getFirestore,collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc,addDoc,query,where,orderBy,runTransaction}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import{getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUserWithEmailAndPassword,updatePassword}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+/* ====== PASTE YOUR FIREBASE WEB CONFIG HERE ====== */
+const CFG={apiKey:"AIzaSyCNRXtryPvePPlvVwEt7sSG8MBlRKG2gV8",authDomain:"luxvenjob.firebaseapp.com",projectId:"luxvenjob",storageBucket:"luxvenjob.firebasestorage.app",messagingSenderId:"1038476778594",appId:"1:1038476778594:web:78dc2aa19f326ef170453b"};
+const app=initializeApp(CFG),db=getFirestore(app),au=getAuth(app);
+const OWNER='luxven_job@luxven.com';/* CHANGE: same owner email as in the rules */
+const $=s=>document.querySelector(s),A=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const STEPS=['Application Received','Under Review','Shortlisted','Interview','Selected'],ALLST=[...STEPS,'Rejected'];
+const REASONS=["Qualification doesn't match","Experience doesn't match","Required skills missing","Position filled","Application incomplete","Other"];
+const DEF={phone:'01402877126',whatsapp:'01402877126',showSupport:true,hqAddress:'Dhaka, Bangladesh',hqMap:'',showHQ:true,facebook:'',instagram:'',linkedin:'',heroTitle:'Build the next chapter with us.',heroText:'LUXVEN is a premium Bangladeshi menswear brand. Join a team that cares about craft, detail and the feeling of premium.'};
+const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+const norm=p=>p.replace(/[\s-]/g,'').replace(/^\+?88/,'');
+const open=j=>j.status=='published'&&(!j.deadline||new Date(j.deadline+'T23:59:59')>=new Date());
+const fmt=d=>d?new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}):'—';
+const lines=t=>String(t||'').split('\n').filter(x=>x.trim());
+const ul=t=>lines(t).length?`<ul>${lines(t).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<p class="m">—</p>';
+let S={...DEF},J=[],P=[];
+async function load(){try{const s=await getDoc(doc(db,'settings','site'));S={...DEF,...(s.exists()?s.data():{})};
+J=(await getDocs(query(collection(db,'jobs'),where('status','in',['published','closed'])))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+P=(await getDocs(query(collection(db,'promos'),where('active','==',true)))).docs.map(d=>({id:d.id,...d.data()}))}catch(e){console.error(e)}}
+const hand=p=>`tel:${p}`,wa=p=>`https://wa.me/${'88'+norm(p)}`;
+function foot(){$('#foot').innerHTML=`<div class="w"><div><a class="logo" href="#/"><svg viewBox="0 0 60 40" style="width:24px"><path d="M6 16l8 20h32l8-20-14 10L30 6 20 26z" fill="currentColor"/></svg>LUXVEN</a><p class="m sm">Official Careers · Feel the premium</p></div>
+<div class="sm">${S.showSupport?`<a href="${hand(S.phone)}">Support: ${esc(S.phone)}</a><br><a href="${wa(S.whatsapp)}">WhatsApp</a><br>`:''}${S.showHQ?`<span class="m">${esc(S.hqAddress)}</span><br>`:''}${['facebook','instagram','linkedin'].filter(k=>S[k]).map(k=>`<a href="${esc(S[k])}" target="_blank" rel="noopener">${k}</a> `).join('')}</div>
+<p class="m sm" style="width:100%">© ${new Date().getFullYear()} LUXVEN. All rights reserved. <a href="#/admin" style="opacity:.4">Admin</a></p></div>`}
+const jcard=j=>`<article class="card job"><div style="display:flex;justify-content:space-between;gap:8px"><h3>${esc(j.title)}</h3><span class="pill ${open(j)?'':'c'}">${open(j)?'Open':'Closed'}</span></div>
+<div class="kv"><span>Location</span><span>${esc(j.location)}</span><span>Type</span><span>${esc(j.type)}</span><span>Vacancy</span><span>${esc(j.vacancy)}</span><span>Experience</span><span>${esc(j.experience)}</span><span>Salary</span><span>${esc(j.salary)}</span><span>Deadline</span><span>${fmt(j.deadline)}</span></div>
+<div style="margin-top:auto" class="bar"><a class="b" href="#/job/${j.id}">${open(j)?'APPLY NOW':'VIEW DETAILS'}</a></div></article>`;
+function home(){A.innerHTML=`<section class="hero"><div class="w"><div><p class="m" style="letter-spacing:.2em;font-weight:700">LUXVEN CAREERS</p><h1 style="margin:16px 0 20px">${esc(S.heroTitle)}</h1><p class="m" style="max-width:480px;margin-bottom:28px">${esc(S.heroText)}</p><a class="b" href="#jobs" onclick="document.getElementById('jobs').scrollIntoView();return false">EXPLORE OPEN POSITIONS</a></div>
+<div class="stage"><div class="rig" id="rig"><div class="gl g1"></div><div class="gl g2"></div><div class="gl g3"></div><div class="cr"><svg viewBox="0 0 60 40"><path d="M6 16l8 20h32l8-20-14 10L30 6 20 26z" fill="#0b0b0b"/></svg></div></div></div></div></section>
+<section class="s" id="jobs"><div class="w">${P.map(p=>`<div class="promo ${p.image?'i':''}" style="${p.image?`background-image:url(${esc(p.image)})`:''}"><div><span class="sm" style="opacity:.7">${esc(p.headline)}</span><h2>${esc(p.jobTitle)}</h2><p>${esc(p.subheadline)} ${esc(p.description)}</p><p class="sm" style="opacity:.8">${esc(p.vacancy)} Vacancies · ${esc(p.location)}</p></div><a class="b" href="${p.jobId?'#/job/'+p.jobId:'#jobs'}">${esc(p.btn||'APPLY NOW')}</a></div>`).join('')}
+<h2>Open Positions</h2><div class="grid">${J.map(jcard).join('')||'<p class="m">No open positions right now. Please check back soon.</p>'}</div></div></section>
+${S.showSupport||S.showHQ?`<section class="s" style="padding-top:0"><div class="w"><h2>LUXVEN Support</h2><div class="grid">${S.showSupport?`<div class="card"><h3>Call us</h3><p class="m">${esc(S.phone)}</p><div class="bar"><a class="b" href="${hand(S.phone)}">CALL NOW</a></div></div><div class="card"><h3>WhatsApp</h3><p class="m">${esc(S.whatsapp)}</p><div class="bar"><a class="b o" href="${wa(S.whatsapp)}" target="_blank" rel="noopener">CHAT ON WHATSAPP</a></div></div>`:''}${S.showHQ?`<div class="card"><h3>LUXVEN HQ</h3><p class="m">${esc(S.hqAddress)}</p>${S.hqMap?`<div class="bar"><a class="b o" href="${esc(S.hqMap)}" target="_blank" rel="noopener">VIEW ON MAP</a></div>`:''}</div>`:''}</div></div></section>`:''}`;
+const r=$('#rig');if(r){const st=A.querySelector('.stage');st.onpointermove=e=>{const b=st.getBoundingClientRect();r.style.transform=`rotateY(${((e.clientX-b.left)/b.width-.5)*30}deg) rotateX(${-((e.clientY-b.top)/b.height-.5)*24}deg)`};st.onpointerleave=()=>r.style.transform=''}}
+async function getJob(id){if(!id)return null;const s=await getDoc(doc(db,'jobs',id));return s.exists()?{id,...s.data()}:null}
+async function jobPage(id){const j=await getJob(id);if(!j){A.innerHTML='<div class="w s"><h2>Job not found</h2><a class="b" href="#/">BACK TO JOBS</a></div>';return}
+const sec=(t,b)=>`<div class="sec"><h3>${t}</h3>${b}</div>`;
+A.innerHTML=`<div class="w s" style="max-width:780px"><div class="ban"><span class="m sm">You are viewing / applying for:</span><h2 style="margin:4px 0 0">${esc(j.title)}</h2></div>
+<div class="card kv"><span>Location</span><span>${esc(j.location)}</span><span>Job type</span><span>${esc(j.type)}</span><span>Salary</span><span>${esc(j.salary)}</span><span>Vacancy</span><span>${esc(j.vacancy)}</span><span>Experience</span><span>${esc(j.experience)}</span><span>Education</span><span>${esc(j.education)}</span><span>Deadline</span><span>${fmt(j.deadline)}</span></div>
+${sec('Job Description',`<p>${esc(j.description)}</p>`)}${sec('Responsibilities',ul(j.responsibilities))}${sec('Requirements',ul(j.requirements))}${sec('Educational Qualification',`<p>${esc(j.education)}</p>`)}${sec('Experience',`<p>${esc(j.experience)}</p>`)}${sec('Required Skills',ul(j.skills))}${sec('Salary & Benefits',`<p>${esc(j.salary)}</p>${ul(j.benefits)}`)}${sec('Working Location',`<p>${esc(j.location)}</p>`)}${sec('Working Hours',`<p>${esc(j.hours)}</p>`)}${sec('Application Deadline',`<p>${fmt(j.deadline)}</p>`)}
+<div class="bar" style="margin-top:40px">${open(j)?`<a class="b" href="#/apply/${j.id}">APPLY NOW</a>`:'<span class="pill c">Applications closed</span>'}<a class="b o" href="#/">ALL POSITIONS</a></div></div>`}
+const CF=[['name','Full Name *','text',1],['phone','Phone Number *','tel',1],['whatsapp','WhatsApp Number *','tel',1],['email','Email','email'],['location','Current Location','text'],['education','Educational Qualification','text'],['experience','Work Experience','text'],['prevCompany','Previous Company','text'],['skills','Skills','text'],['expSalary','Expected Salary','text']];
+async function applyPage(id){const j=await getJob(id);if(!j||!open(j)){A.innerHTML='<div class="w s"><h2>This position is not accepting applications.</h2><a class="b" href="#/">BACK TO JOBS</a></div>';return}
+A.innerHTML=`<div class="w s" style="max-width:640px"><div class="ban"><span class="m sm">APPLICATION FOR</span><h2 style="margin:4px 0 0">${esc(j.title)}</h2><span class="m sm">${esc(j.location)} · ${esc(j.type)}</span></div>
+<form id="f" class="card" novalidate>${CF.map(([k,l,t,q])=>`<label>${l}<input name="${k}" type="${t}" ${q?'required':''} ${t=='tel'?'inputmode="tel" placeholder="01XXXXXXXXX"':''}></label>`).join('')}
+<label>CV Upload * (PDF, DOC, DOCX · max 700 KB)<input name="cv" type="file" accept=".pdf,.doc,.docx" required></label><label>Additional Information<textarea name="info" rows="4"></textarea></label>
+<input class="hp" name="website" tabindex="-1" autocomplete="off"><p class="err" id="e"></p><button class="b" style="width:100%;margin-top:18px" id="sb">SUBMIT APPLICATION</button></form></div>`;
+$('#f').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,v=Object.fromEntries(new FormData(f)),e=$('#e'),btn=$('#sb');e.textContent='';
+if(v.website)return;const ph=norm(v.phone||''),wp=norm(v.whatsapp||''),cv=f.cv.files[0];
+if(!v.name.trim())return e.textContent='Enter your full name.';if(!/^01\d{9}$/.test(ph))return e.textContent='Enter a valid phone number (01XXXXXXXXX).';if(!/^01\d{9}$/.test(wp))return e.textContent='Enter a valid WhatsApp number (01XXXXXXXXX).';
+if(v.email&&!/^\S+@\S+\.\S+$/.test(v.email))return e.textContent='Enter a valid email address.';
+if(!cv)return e.textContent='Upload your CV.';const ext=cv.name.split('.').pop().toLowerCase();if(!['pdf','doc','docx'].includes(ext))return e.textContent='CV must be PDF, DOC or DOCX.';if(cv.size>700*1024)return e.textContent='CV must be under 700 KB. Compress your file and try again.';
+btn.disabled=true;btn.textContent='SUBMITTING…';
+try{const rid=Date.now()+'-'+Math.random().toString(36).slice(2,10),path='cv/'+rid,b64=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result.split(',')[1]);r.onerror=no;r.readAsDataURL(cv)});await setDoc(doc(db,'cvs',rid),{data:b64,name:cv.name.slice(0,100),type:cv.type||'application/octet-stream',at:Date.now()});
+const phh=await sha(ph),yr=new Date().getFullYear(),now=Date.now();
+const aid=await runTransaction(db,async t=>{const cr=doc(db,'counters',''+yr),dr=doc(db,'dup',j.id+'_'+phh);if((await t.get(dr)).exists())throw Error('dup');
+const cs=await t.get(cr),n=(cs.exists()?cs.data().n:0)+1,aid=`LX-${yr}-${String(n).padStart(5,'0')}`;
+t.set(cr,{n});t.set(dr,{at:now});
+t.set(doc(db,'applications',aid),{name:v.name.trim(),phone:ph,whatsapp:wp,email:v.email||'',location:v.location||'',education:v.education||'',experience:v.experience||'',prevCompany:v.prevCompany||'',skills:v.skills||'',expSalary:v.expSalary||'',info:v.info||'',cvPath:path,jobId:j.id,jobTitle:j.title,status:'Application Received',notes:'',createdAt:now});
+t.set(doc(db,'tracking',aid),{ph:phh,jobTitle:j.title,createdAt:now,status:'Application Received',reason:'',interview:''});return aid});
+location.hash='#/success/'+aid}catch(x){e.textContent=x.message=='dup'?'You have already applied for this position with this phone number.':'Submission failed. Check your connection and try again.';btn.disabled=false;btn.textContent='SUBMIT APPLICATION'}}}
+function success(id){A.innerHTML=`<div class="w s" style="max-width:560px;text-align:center"><h1 style="font-size:40px">Application Submitted Successfully</h1><p class="m" style="margin:16px 0">Your Application ID</p><div class="card"><h2 style="margin:0;letter-spacing:.04em">${esc(id)}</h2></div><p class="m" style="margin:20px 0">Save this Application ID. You will need it with your phone number to track your application.</p><div class="bar" style="justify-content:center"><a class="b" href="#/track">CHECK APPLICATION STATUS</a><a class="b o" href="#/">BACK TO JOBS</a></div></div>`}
+function track(){A.innerHTML=`<div class="w s" style="max-width:560px"><h2>Check application status</h2><form id="tf" class="card"><label>Application ID<input name="id" placeholder="LX-2026-00001" required></label><label>Phone Number<input name="phone" type="tel" required></label><p class="err" id="e"></p><button class="b" style="width:100%;margin-top:18px">CHECK STATUS</button></form><div id="res"></div></div>`;
+$('#tf').onsubmit=async ev=>{ev.preventDefault();const v=Object.fromEntries(new FormData(ev.target)),id=v.id.trim().toUpperCase();$('#e').textContent='';$('#res').innerHTML='';
+try{const s=await getDoc(doc(db,'tracking',id));if(!s.exists()||s.data().ph!==await sha(norm(v.phone)))return $('#e').textContent='No application found. Check your ID and phone number.';
+const d=s.data(),rej=d.status=='Rejected',cur=STEPS.indexOf(d.status);
+$('#res').innerHTML=`<div class="card" style="margin-top:20px"><div class="kv"><span>Application ID</span><b>${esc(id)}</b><span>Position</span><b>${esc(d.jobTitle)}</b><span>Applied on</span><b>${fmt(d.createdAt)}</b><span>Status</span><b>${esc(d.status)}</b></div>
+${rej?`<p class="err">STATUS: REJECTED</p><p><b>REASON:</b> ${esc(d.reason||'—')}</p>`:''}${d.interview&&d.status=='Interview'?`<p><b>Interview:</b> ${esc(d.interview)}</p>`:''}
+<ul class="tl">${STEPS.map((x,i)=>`<li class="${!rej&&i<=cur?'d':''}">${x}</li>`).join('')}${rej?'<li class="x">Rejected</li>':''}</ul></div>`}catch(x){$('#e').textContent='Could not load status. Try again.'}}}
+/* ================= ADMIN ================= */
+const JF=[['title','Job title','text'],['location','Location','text'],['type','Job type','select',['Full-time','Part-time','Contract','Internship']],['vacancy','Vacancy','number'],['salary','Salary','text'],['experience','Experience','text'],['education','Education','text'],['deadline','Deadline','date'],['hours','Working hours','text'],['description','Description','textarea'],['responsibilities','Responsibilities (one per line)','textarea'],['requirements','Requirements (one per line)','textarea'],['skills','Required skills (one per line)','textarea'],['benefits','Benefits (one per line)','textarea']];
+const SF=[['phone','Support phone','tel'],['whatsapp','WhatsApp number','tel'],['showSupport','Show support section','check'],['hqAddress','HQ address','text'],['hqMap','HQ map link (optional)','text'],['showHQ','Show HQ location','check'],['facebook','Facebook URL','text'],['instagram','Instagram URL','text'],['linkedin','LinkedIn URL','text'],['heroTitle','Hero headline','text'],['heroText','Hero text','textarea']];
+const opt=x=>{const[a,b]=Array.isArray(x)?x:[x,x];return[a,b]};
+const FM=(fs,v={})=>fs.map(([k,l,t,o])=>t=='textarea'?`<label>${l}<textarea name="${k}" rows="4">${esc(v[k])}</textarea></label>`:t=='select'?`<label>${l}<select name="${k}">${o.map(x=>{const[a,b]=opt(x);return`<option value="${esc(a)}" ${v[k]==a?'selected':''}>${esc(b)}</option>`}).join('')}</select></label>`:t=='check'?`<label style="display:flex;gap:10px;align-items:center"><input type="checkbox" name="${k}" ${v[k]?'checked':''}>${l}</label>`:`<label>${l}<input name="${k}" type="${t}" value="${esc(v[k])}"></label>`).join('');
+const RD=(f,fs)=>Object.fromEntries(fs.map(([k,,t])=>[k,t=='check'?f.elements[k].checked:t=='number'?+f.elements[k].value||0:f.elements[k].value.trim()]));
+let tab='dash',user=null,ROLE=null,STAFF={},AJ=[],AA=[],flt='all';
+const shrink=f=>new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const k=Math.min(1,900/i.width),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.7))};i.onerror=no;i.src=URL.createObjectURL(f)});
+const em=v=>v.trim().includes('@')?v.trim():v.trim().toLowerCase()+'@staff.luxven.com',shown=m=>m.replace('@staff.luxven.com',''),DAY=864e5,WHO=()=>STAFF.name||user.email;
+onAuthStateChanged(au,async u=>{user=u;ROLE=null;STAFF={};if(u){try{const s=await getDoc(doc(db,'staff',u.uid));if(s.exists()){STAFF=s.data();ROLE=STAFF.role}else if((u.email||'').toLowerCase()==OWNER.toLowerCase())ROLE='admin'}catch{}}if(location.hash.startsWith('#/admin'))admin()});
+const out=m=>{A.innerHTML=`<div class="w s"><h2>${m[0]}</h2><p class="m">${m[1]}</p><button class="b" id="so">SIGN OUT</button></div>`;$('#so').onclick=()=>signOut(au)};
+async function admin(){if(!user){A.innerHTML=`<div class="w s" style="max-width:420px"><h2>Staff sign in</h2><form id="lf" class="card"><label>Email or username<input name="e" autocapitalize="none" required></label><label>Password<input name="p" type="password" required></label><p class="err" id="e"></p><button class="b" style="width:100%;margin-top:18px">SIGN IN</button></form></div>`;
+$('#lf').onsubmit=async ev=>{ev.preventDefault();try{await signInWithEmailAndPassword(au,em(ev.target.e.value),ev.target.p.value)}catch{$('#e').textContent='Invalid email or password.'}};return}
+if(!ROLE)return out(['Access denied','This account is not authorised LUXVEN staff.']);
+const mod=ROLE=='moderator';
+try{AJ=(await getDocs(collection(db,'jobs'))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));AA=(await getDocs(query(collection(db,'applications'),orderBy('createdAt','desc')))).docs.map(d=>({id:d.id,...d.data()}))}catch(e){return out(['Could not load data','Check the Firestore rules and try again.'])}
+const old=AA.filter(a=>a.status=='Rejected'&&a.rejectedAt&&Date.now()-a.rejectedAt>10*DAY);
+if(old.length){if(!mod)await Promise.all(old.map(async a=>{try{await deleteDoc(doc(db,'cvs',a.cvPath.slice(3)))}catch{}try{await deleteDoc(doc(db,'applications',a.id))}catch{}}));AA=AA.filter(a=>!old.includes(a))}
+const T=[['dash','Dashboard'],['jobs','Jobs'],['apps','Applications'],...(mod?[]:[['promo','Recruitment Promo'],['set','Settings'],['staff','Staff']])];
+if(!T.some(x=>x[0]==tab))tab='dash';
+A.innerHTML=`<div class="w s"><div class="tabs">${T.map(([k,l])=>`<button class="b ${tab==k?'':'o'} sm" data-t="${k}">${l}</button>`).join('')}<button class="b o sm" id="pw">Change password</button><button class="b o sm" id="so">Sign out (${esc(WHO())} · ${ROLE})</button></div><div id="ad"></div></div>`;
+A.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;admin()});$('#so').onclick=()=>signOut(au);$('#pw').onclick=async()=>{const p=prompt('New password (min 8 characters)');if(!p)return;if(p.length<8)return alert('Password must be at least 8 characters.');try{await updatePassword(user,p);alert('Password changed.')}catch(x){alert(x.code=='auth/requires-recent-login'?'Please sign out, sign in again, then change the password.':'Could not change password.')}};
+({dash:aDash,jobs:aJobs,apps:aApps,promo:aPromo,set:aSet,staff:aStaff})[tab]()}
+const cnt=s=>AA.filter(a=>a.status==s).length;
+function aDash(){const n=[['Active Jobs',AJ.filter(open).length],['Total Applications',AA.length],['New',cnt('Application Received')],['Under Review',cnt('Under Review')],['Shortlisted',cnt('Shortlisted')],['Interviews',cnt('Interview')],['Selected',cnt('Selected')],['Rejected',cnt('Rejected')]];
+$('#ad').innerHTML=`<div class="st">${n.map(([l,v])=>`<div class="card"><b>${v}</b><span class="m sm">${l}</span></div>`).join('')}</div>`}
+function aJobs(){const box=$('#ad');if(ROLE=='moderator'){box.innerHTML=AJ.map(j=>`<div class="card" style="margin-bottom:12px"><h3>${esc(j.title)} <span class="pill ${j.status=='published'?'':'c'}">${esc(j.status)}</span></h3><p class="m sm">${esc(j.location)} · ${esc(j.type)} · Vacancy ${esc(j.vacancy)} · Deadline ${fmt(j.deadline)}</p></div>`).join('')||'<p class="m">No jobs.</p>';return}box.innerHTML=`<button class="b" id="nj">+ NEW JOB</button><div style="margin-top:20px">${AJ.map(j=>`<details class="card"><summary><span>${esc(j.title)} <span class="pill ${j.status=='published'?'':'c'}">${esc(j.status)}</span></span></summary><form data-id="${j.id}">${FM(JF,j)}<div class="bar"><button class="b sm" data-s="published">Publish</button><button class="b o sm" data-s="draft">Unpublish</button><button class="b o sm" data-s="closed">Close</button><button class="b o sm" data-s="published">Reopen</button><button class="b o sm" data-s="save">Save</button><button class="b r sm" data-s="del">Delete</button></div></form></details>`).join('')}</div>`;
+$('#nj').onclick=async()=>{await setDoc(doc(collection(db,'jobs')),{title:'New position',status:'draft',vacancy:1,type:'Full-time',createdAt:Date.now()});admin()};
+box.querySelectorAll('form').forEach(f=>f.onclick=async e=>{const s=e.target.dataset?.s;if(!s)return;e.preventDefault();const ref_=doc(db,'jobs',f.dataset.id);
+if(s=='del'){if(confirm('Delete this job permanently?')){await deleteDoc(ref_);admin()}return}
+const d=RD(f,JF);if(s!='save')d.status=s;await updateDoc(ref_,d);admin()})}
+function aApps(){const box=$('#ad'),mod=ROLE=='moderator',DL=a=>Math.max(0,Math.ceil(10-(Date.now()-a.rejectedAt)/DAY));
+const list=AA.filter(a=>flt=='rej'?a.status=='Rejected':flt=='new'?!['Rejected','Selected'].includes(a.status):true);
+box.innerHTML=`<label>Show<select id="fl"><option value="all" ${flt=='all'?'selected':''}>All applications</option><option value="new" ${flt=='new'?'selected':''}>Active (not rejected / selected)</option><option value="rej" ${flt=='rej'?'selected':''}>Rejected (review)</option></select></label><div style="margin-top:16px">`+(list.map(a=>{const lock=mod&&['Rejected','Selected'].includes(a.status),opts=mod?['Under Review','Shortlisted','Interview','Rejected']:ALLST;return`<details class="card"><summary><span>${esc(a.name)} — ${esc(a.jobTitle)}</span><span class="pill ${a.status=='Rejected'?'x':''}">${esc(a.status)}</span></summary>
+<div class="kv" style="margin:14px 0"><span>ID</span><span>${a.id}</span><span>Phone</span><a href="tel:${a.phone}">${a.phone}</a><span>WhatsApp</span><a href="${wa(a.whatsapp)}" target="_blank">${a.whatsapp}</a><span>Email</span><span>${esc(a.email)}</span><span>Location</span><span>${esc(a.location)}</span><span>Education</span><span>${esc(a.education)}</span><span>Experience</span><span>${esc(a.experience)} ${esc(a.prevCompany)}</span><span>Skills</span><span>${esc(a.skills)}</span><span>Exp. salary</span><span>${esc(a.expSalary)}</span><span>Applied</span><span>${fmt(a.createdAt)}</span><span>Info</span><span>${esc(a.info)}</span></div>
+${a.status=='Rejected'?`<p class="err sm">Rejected by ${esc(a.rejectedBy||'—')} · ${esc(a.reasonSel=='Other'?a.reasonOther:a.reasonSel)}${a.rejectedAt?` · auto-deletes in ${DL(a)} day(s)`:''}</p>`:''}
+<button class="b o sm" data-cv="${esc(a.cvPath)}">VIEW / DOWNLOAD CV</button>
+${lock?'<p class="m sm" style="margin-top:14px">Only an admin can change this application.</p>':`<form data-id="${a.id}"><label>Status<select name="status">${opts.map(x=>`<option ${a.status==x?'selected':''}>${x}</option>`).join('')}</select></label>
+<label>Rejection reason<select name="reasonSel"><option value="">—</option>${REASONS.map(x=>`<option ${a.reasonSel==x?'selected':''}>${esc(x)}</option>`).join('')}</select></label><label>Custom reason (if “Other”)<input name="reasonOther" value="${esc(a.reasonOther)}"></label>
+<label>Interview details (shown to candidate)<input name="interview" value="${esc(a.interview)}"></label><label>Internal notes (never shown to candidate)<textarea name="notes" rows="3">${esc(a.notes)}</textarea></label><button class="b sm" style="margin-top:14px">SAVE</button></form>`}</details>`}).join('')||'<p class="m">No applications.</p>')+'</div>';
+$('#fl').onchange=e=>{flt=e.target.value;aApps()};
+box.querySelectorAll('[data-cv]').forEach(b=>b.onclick=async()=>{try{const c=(await getDoc(doc(db,'cvs',b.dataset.cv.slice(3)))).data(),bin=atob(c.data),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([u],{type:c.type}));l.download=c.name;l.click()}catch{alert('CV not found (it may have been deleted).')}});
+box.querySelectorAll('form').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const id=f.dataset.id,a=AA.find(x=>x.id==id),v=Object.fromEntries(new FormData(f)),rej=v.status=='Rejected';
+if(rej&&!v.reasonSel)return alert('Select a rejection reason.');if(rej&&v.reasonSel=='Other'&&!v.reasonOther.trim())return alert('Write the custom reason.');
+const reason=rej?(v.reasonSel=='Other'?v.reasonOther.trim():v.reasonSel):'',u={status:v.status,reasonSel:v.reasonSel,reasonOther:v.reasonOther,interview:v.interview,notes:v.notes};
+if(rej&&a.status!='Rejected'){u.rejectedAt=Date.now();u.rejectedBy=WHO()+' ('+ROLE+')'}if(!rej&&a.status=='Rejected'){u.rejectedAt=0;u.rejectedBy=''}
+try{await updateDoc(doc(db,'applications',id),u);await updateDoc(doc(db,'tracking',id),{status:v.status,reason,interview:v.interview});alert('Saved');admin()}catch{alert('Not allowed or failed. Reload and try again.')}})}
+async function aStaff(){const box=$('#ad'),ss=(await getDocs(collection(db,'staff'))).docs.map(d=>({id:d.id,...d.data()})),ro=r=>['moderator','admin'].map(x=>`<option value="${x}" ${r==x?'selected':''}>${x=='admin'?'Admin (full)':'Moderator (limited)'}</option>`).join('');
+box.innerHTML=`<details class="card" open><summary>+ Add staff user</summary><form id="sf2"><label>Name<input name="name" required></label><label>Username (short, e.g. rahim) or email<input name="email" autocapitalize="none" required></label><label>Password (min 8 characters)<input name="pw" type="password" minlength="8" required></label><label>Role<select name="role">${ro('moderator')}</select></label><p class="err" id="e"></p><button class="b sm" style="margin-top:14px">CREATE USER</button></form></details>
+<div style="margin-top:16px">${ss.map(x=>`<div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><span><b>${esc(x.name)}</b><br><span class="m sm">${esc(shown(x.email))}</span></span>${x.id==user.uid?'<span class="pill c">you</span>':`<span class="bar" style="margin:0"><select data-r="${x.id}" style="width:auto;min-height:40px">${ro(x.role)}</select><button class="b r sm" data-d="${x.id}">Remove</button></span>`}</div>`).join('')}</div><p class="m sm">Removing a user blocks their access immediately.</p>`;
+$('#sf2').onsubmit=async e=>{e.preventDefault();const v=Object.fromEntries(new FormData(e.target)),er=$('#e');er.textContent='';if(!v.email.includes('@')&&!/^[a-z0-9._-]{3,20}$/i.test(v.email.trim()))return er.textContent='Username must be 3-20 letters or numbers.';
+try{const sa=initializeApp(CFG,'s'+Date.now()),sx=getAuth(sa),c=await createUserWithEmailAndPassword(sx,em(v.email),v.pw);await setDoc(doc(db,'staff',c.user.uid),{name:v.name.trim(),email:em(v.email),role:v.role,createdAt:Date.now()});await signOut(sx);aStaff()}catch(x){er.textContent=x.code=='auth/email-already-in-use'?'This email already has a login. Use a different email.':'Could not create user: '+(x.code||x.message)}};
+box.querySelectorAll('[data-r]').forEach(el=>el.onchange=async()=>{await updateDoc(doc(db,'staff',el.dataset.r),{role:el.value});alert('Role updated')});
+box.querySelectorAll('[data-d]').forEach(el=>el.onclick=async()=>{if(confirm('Remove this user?')){await deleteDoc(doc(db,'staff',el.dataset.d));aStaff()}})}
+const PF=[['title','Poster title','text'],['headline','Headline (e.g. WE ARE HIRING)','text'],['subheadline','Subheadline','text'],['description','Description','textarea'],['jobTitle','Job title','text'],['vacancy','Vacancy','number'],['location','Location','text'],['btn','Button text','text'],['active','Show on website','check']];
+function aPromo(){const box=$('#ad'),jo=[['','Open positions (general)'],...AJ.map(j=>[j.id,j.title])];
+const pf=(p={})=>`${FM(PF,p)}<label>Button opens application for<select name="jobId">${jo.map(([a,b])=>`<option value="${a}" ${p.jobId==a?'selected':''}>${esc(b)}</option>`).join('')}</select></label><label>Image<input type="file" name="img" accept="image/*"></label>`;
+getDocs(collection(db,'promos')).then(s=>{const ps=s.docs.map(d=>({id:d.id,...d.data()}));
+box.innerHTML=`<details class="card"><summary>+ New promo</summary><form id="np">${pf()}<button class="b sm" style="margin-top:14px">CREATE</button></form></details>${ps.map(p=>`<details class="card"><summary>${esc(p.title)}</summary><form data-id="${p.id}">${pf(p)}<div class="bar"><button class="b sm" data-s="save">Save</button><button class="b r sm" data-s="del">Delete</button></div></form></details>`).join('')}`;
+const save=async(f,id)=>{const d=RD(f,PF);d.jobId=f.elements.jobId.value;const im=f.elements.img.files[0];if(im)d.image=await shrink(im);
+id?await updateDoc(doc(db,'promos',id),d):await addDoc(collection(db,'promos'),d)};
+$('#np').onsubmit=async e=>{e.preventDefault();await save(e.target);admin()};
+box.querySelectorAll('form[data-id]').forEach(f=>f.onclick=async e=>{const s=e.target.dataset?.s;if(!s)return;e.preventDefault();if(s=='del'){if(confirm('Delete promo?')){await deleteDoc(doc(db,'promos',f.dataset.id));admin()}}else{await save(f,f.dataset.id);admin()}})})}
+function aSet(){$('#ad').innerHTML=`<form id="sf" class="card">${FM(SF,S)}<button class="b" style="margin-top:18px">SAVE SETTINGS</button></form>`;
+$('#sf').onsubmit=async e=>{e.preventDefault();await setDoc(doc(db,'settings','site'),RD(e.target,SF),{merge:true});alert('Saved')}}
+/* ================= ROUTER ================= */
+async function route(){const[,p,a]=location.hash.split('/');window.scrollTo(0,0);
+if(p=='admin'){await load();foot();return admin()}
+A.innerHTML='<div class="w s m">Loading…</div>';await load();foot();
+if(p=='job')return jobPage(a);if(p=='apply')return applyPage(a);if(p=='success')return success(a);if(p=='track')return track();home()}
+const sp=$('#sp');let seen=0;try{seen=sessionStorage.getItem('lxsp')}catch{}
+if(seen)sp.remove();else{const go=()=>{sp.classList.add('out');try{sessionStorage.setItem('lxsp',1)}catch{}setTimeout(()=>sp.remove(),700)};sp.onclick=go;setTimeout(go,2000)}
+addEventListener('hashchange',route);route();
+</script></body></html>
