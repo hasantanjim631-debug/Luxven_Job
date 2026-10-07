@@ -22,11 +22,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signed() { return request.auth != null; }
-    function owner() { return signed() && request.auth.token.email == 'luxven_job@luxven.com'; }  // CHANGE
+    function owner() { return signed() && request.auth.token.email == 'luxven_job@luxven.com'; }
     function sdoc() { return /databases/$(database)/documents/staff/$(request.auth.uid); }
     function admin() { return owner() || (signed() && exists(sdoc()) && get(sdoc()).data.role == 'admin'); }
     function mod() { return signed() && exists(sdoc()) && get(sdoc()).data.role == 'moderator'; }
     function staff() { return admin() || mod(); }
+    function siteOpen() { return !exists(/databases/$(database)/documents/settings/site) || get(/databases/$(database)/documents/settings/site).data.get('closedOn', false) == false; }
     function modOpen(r) { return r.data.status in ['Application Received','Under Review','Shortlisted','Interview']; }
     function modNew(r) { return r.data.status in ['Under Review','Shortlisted','Interview','Rejected']; }
 
@@ -43,7 +44,7 @@ service cloud.firestore {
       allow write: if admin();
     }
     match /applications/{id} {
-      allow create: if id.matches('LX-[0-9]{4}-[0-9]{5}')
+      allow create: if siteOpen() && id.matches('LX-[0-9]{4}-[0-9]{5}')
         && request.resource.data.name is string && request.resource.data.name.size() > 1 && request.resource.data.name.size() < 100
         && request.resource.data.phone.matches('01[0-9]{9}') && request.resource.data.whatsapp.matches('01[0-9]{9}')
         && request.resource.data.status == 'Application Received'
@@ -66,7 +67,7 @@ service cloud.firestore {
       allow update: if request.resource.data.n == resource.data.n + 1;
     }
     match /cvs/{id} {
-      allow create: if request.resource.data.keys().hasOnly(['data','name','type','at']) && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
+      allow create: if siteOpen() && request.resource.data.keys().hasOnly(['data','name','type','at']) && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
       allow read: if staff();
       allow delete: if admin();
     }
@@ -77,7 +78,6 @@ service cloud.firestore {
     }
   }
 }
-
 -->
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -142,8 +142,9 @@ details.card{margin-bottom:12px}summary{cursor:pointer;font-weight:700;display:f
 .cvh{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--l)}.cvh b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:42vw}
 .cvb{flex:1;overflow:auto;background:#e8e8e6;padding:8px;-webkit-overflow-scrolling:touch}
 @media(max-width:800px){.pcard{grid-template-columns:1fr}}
+.nt{background:#0b0b0b;color:#fff;text-align:center;font-size:14px;padding:10px 16px;font-weight:600}.cl nav a.t{display:none}
 </style></head><body>
-<div id="sp" role="presentation"><div><p class="t1">We are hiring.</p><p class="t2">Join the LUXVEN team. Open positions now available.</p><div class="ln"></div></div></div><nav><div class="w"><a class="logo" href="#/" aria-label="LUXVEN"><i class="lg-c"></i><i class="lg-w"></i></a><div><a class="t" href="#/">Jobs</a><a class="t" href="#/track">Apply history</a></div></div></nav>
+<div id="sp" role="presentation"><div id="spi" style="display:none"><p class="t1" id="s1"></p><p class="t2" id="s2"></p><div class="ln"></div></div></div><div id="nt"></div><nav><div class="w"><a class="logo" href="#/" aria-label="LUXVEN"><i class="lg-c"></i><i class="lg-w"></i></a><div><a class="t" href="#/">Jobs</a><a class="t" href="#/track">Apply history</a></div></div></nav>
 <main id="app"></main><footer id="foot"></footer>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -157,7 +158,7 @@ const $=s=>document.querySelector(s),A=$('#app');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const STEPS=['Application Received','Under Review','Shortlisted','Interview','Selected'],ALLST=[...STEPS,'Rejected'];
 const REASONS=["Qualification doesn't match","Experience doesn't match","Required skills missing","Position filled","Application incomplete","Other"];
-const DEF={phone:'01402877126',whatsapp:'01402877126',showSupport:true,hqAddress:'Dhaka, Bangladesh',hqMap:'',showHQ:true,facebook:'',instagram:'',linkedin:'',heroTitle:'Build the next chapter with us.',heroText:'LUXVEN is a premium Bangladeshi menswear brand. Join a team that cares about craft, detail and the feeling of premium.'};
+const DEF={noticeOn:false,noticeText:'',splashOn:true,splashT1:'We are hiring.',splashT2:'Join the LUXVEN team. Open positions now available.',noJobsText:'No open positions right now. Please check back soon.',closedOn:false,closedTitle:'Website temporarily closed',closedReason:'',phone:'01402877126',whatsapp:'01402877126',showSupport:true,hqAddress:'Dhaka, Bangladesh',hqMap:'',showHQ:true,facebook:'',instagram:'',linkedin:'',heroTitle:'Build the next chapter with us.',heroText:'LUXVEN is a premium Bangladeshi menswear brand. Join a team that cares about craft, detail and the feeling of premium.'};
 const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const norm=p=>p.replace(/[\s-]/g,'').replace(/^\+?88/,'');
 const open=j=>j.status=='published'&&(!j.deadline||new Date(j.deadline+'T23:59:59')>=new Date());
@@ -187,7 +188,7 @@ document.body.appendChild(d)}
 function home(){A.innerHTML=`<section class="hero"><div class="w"><div><p class="m" style="letter-spacing:.2em;font-weight:700">LUXVEN CAREERS</p><h1 style="margin:16px 0 20px">${esc(S.heroTitle)}</h1><p class="m" style="max-width:480px;margin-bottom:28px">${esc(S.heroText)}</p><a class="b" href="#jobs" onclick="document.getElementById('jobs').scrollIntoView();return false">EXPLORE OPEN POSITIONS</a></div>
 <div class="stage"><div class="rig" id="rig"><div class="gl g1"></div><div class="gl g2"></div><div class="gl g3"></div><div class="cr"><i class="lg-c" style="width:150px"></i></div></div></div></div></section>
 <section class="s" id="jobs"><div class="w">${P.map(pcard).join('')}
-<h2>Open Positions</h2><div class="grid">${J.map(jcard).join('')||'<p class="m">No open positions right now. Please check back soon.</p>'}</div></div></section>
+<h2>Open Positions</h2><div class="grid">${J.some(open)?'':`<div class="card" style="grid-column:1/-1"><p style="white-space:pre-line">${esc(S.noJobsText)}</p></div>`}${J.map(jcard).join('')}</div></div></section>
 ${S.showSupport||S.showHQ?`<section class="s" style="padding-top:0"><div class="w"><h2>LUXVEN Support</h2><div class="grid">${S.showSupport?`<div class="card"><h3>Call us</h3><p class="m">${esc(S.phone)}</p><div class="bar"><a class="b" href="${hand(S.phone)}">CALL NOW</a></div></div><div class="card"><h3>WhatsApp</h3><p class="m">${esc(S.whatsapp)}</p><div class="bar"><a class="b o" href="${wa(S.whatsapp)}" target="_blank" rel="noopener">CHAT ON WHATSAPP</a></div></div>`:''}${S.showHQ?`<div class="card"><h3>LUXVEN HQ</h3><p class="m">${esc(S.hqAddress)}</p>${S.hqMap?`<div class="bar"><a class="b o" href="${esc(S.hqMap)}" target="_blank" rel="noopener">VIEW ON MAP</a></div>`:''}</div>`:''}</div></div></section>`:''}`;
 setTimeout(promoPop,$('#sp')?2900:500);
 const r=$('#rig');if(r){const st=A.querySelector('.stage');st.onpointermove=e=>{const b=st.getBoundingClientRect();r.style.transform=`rotateY(${((e.clientX-b.left)/b.width-.5)*30}deg) rotateX(${-((e.clientY-b.top)/b.height-.5)*24}deg)`};st.onpointerleave=()=>r.style.transform=''}}
@@ -233,7 +234,7 @@ const SAMPLES=[
 {title:'Graphic Designer',location:'Dhaka (Office)',type:'Full-time',vacancy:1,salary:'BDT 25,000 – 35,000',experience:'2+ Years',education:'Any',hours:'10:00 AM – 7:00 PM, Saturday to Thursday',description:'Create social media creatives, posters and campaign visuals that match the LUXVEN premium identity.',responsibilities:'Design posts, banners and posters\nPrepare product and campaign creatives\nFollow brand guidelines\nCoordinate with the marketing team',requirements:'Strong portfolio\nGood sense of typography and layout\nAbility to meet deadlines',skills:'Photoshop\nIllustrator\nCanva\nVideo editing (bonus)',benefits:'Festival bonus\nCreative environment\nPaid leave'},
 {title:'Store Manager',location:'Uttara, Dhaka',type:'Full-time',vacancy:1,salary:'BDT 30,000 – 40,000',experience:'3+ Years',education:'Bachelor degree',hours:'10:00 AM – 9:00 PM, rotating off day',description:'Lead the store team, manage daily operations and keep the customer experience at a premium level.',responsibilities:'Manage store staff and daily sales\nControl stock and cash handling\nTrain and motivate team members\nReport weekly performance',requirements:'Retail or fashion store experience\nLeadership and people skills\nMust be able to work shifts',skills:'Leadership\nInventory\nSales management',benefits:'Monthly incentive\nFestival bonus\nStaff discount'}];
 const JF=[['title','Job title','text'],['location','Location','text'],['type','Job type','select',['Full-time','Part-time','Contract','Internship']],['vacancy','Vacancy','number'],['salary','Salary','text'],['experience','Experience','text'],['education','Education','text'],['deadline','Deadline','date'],['hours','Working hours','text'],['description','Description','textarea'],['responsibilities','Responsibilities (one per line)','textarea'],['requirements','Requirements (one per line)','textarea'],['skills','Required skills (one per line)','textarea'],['benefits','Benefits (one per line)','textarea']];
-const SF=[['phone','Support phone','tel'],['whatsapp','WhatsApp number','tel'],['showSupport','Show support section','check'],['hqAddress','HQ address','text'],['hqMap','HQ map link (optional)','text'],['showHQ','Show HQ location','check'],['facebook','Facebook URL','text'],['instagram','Instagram URL','text'],['linkedin','LinkedIn URL','text'],['heroTitle','Hero headline','text'],['heroText','Hero text','textarea']];
+const SF=[['phone','Support phone','tel'],['whatsapp','WhatsApp number','tel'],['showSupport','Show support section','check'],['hqAddress','HQ address','text'],['hqMap','HQ map link (optional)','text'],['showHQ','Show HQ location','check'],['facebook','Facebook URL','text'],['instagram','Instagram URL','text'],['linkedin','LinkedIn URL','text'],['heroTitle','Hero headline','text'],['heroText','Hero text','textarea'],['noJobsText','Message shown when no jobs are open','textarea'],['noticeOn','Show top notice bar','check'],['noticeText','Top notice text','text'],['splashOn','Show opening screen (first 2 seconds)','check'],['splashT1','Opening screen big text','text'],['splashT2','Opening screen small text','text'],['closedOn','CLOSE WEBSITE TEMPORARILY (only contact number will show)','check'],['closedTitle','Closed title','text'],['closedReason','Reason for closing (shown to visitors)','textarea']];
 const opt=x=>{const[a,b]=Array.isArray(x)?x:[x,x];return[a,b]};
 const FM=(fs,v={})=>fs.map(([k,l,t,o])=>t=='textarea'?`<label>${l}<textarea name="${k}" rows="4">${esc(v[k])}</textarea></label>`:t=='select'?`<label>${l}<select name="${k}">${o.map(x=>{const[a,b]=opt(x);return`<option value="${esc(a)}" ${v[k]==a?'selected':''}>${esc(b)}</option>`}).join('')}</select></label>`:t=='check'?`<label style="display:flex;gap:10px;align-items:center"><input type="checkbox" name="${k}" ${v[k]?'checked':''}>${l}</label>`:`<label>${l}<input name="${k}" type="${t}" value="${esc(v[k])}"></label>`).join('');
 const RD=(f,fs)=>Object.fromEntries(fs.map(([k,,t])=>[k,t=='check'?f.elements[k].checked:t=='number'?+f.elements[k].value||0:f.elements[k].value.trim()]));
@@ -311,10 +312,13 @@ function aSet(){$('#ad').innerHTML=`<form id="sf" class="card">${FM(SF,S)}<butto
 $('#sf').onsubmit=async e=>{e.preventDefault();await setDoc(doc(db,'settings','site'),RD(e.target,SF),{merge:true});alert('Saved')}}
 /* ================= ROUTER ================= */
 async function route(){const[p,a]=location.hash.replace(/^#\/?/,'').split('/');window.scrollTo(0,0);
-if(p=='admin'||p=='staff'){await load();foot();return admin()}
-A.innerHTML='<div class="w s m">Loading…</div>';await load();foot();
+if(p=='admin'||p=='staff'){await load();foot();document.body.classList.remove('cl');$('#nt').innerHTML='';return admin()}
+A.innerHTML='<div class="w s m">Loading…</div>';await load();foot();runSplash();document.body.classList.toggle('cl',!!S.closedOn);$('#nt').innerHTML=!S.closedOn&&S.noticeOn&&S.noticeText?`<div class="nt">${esc(S.noticeText)}</div>`:'';if(S.closedOn){$('#foot').innerHTML='<div class="w"><p class="m sm">© '+new Date().getFullYear()+' LUXVEN. All rights reserved.</p></div>';return closedPage()}
+
 if(p=='job')return jobPage(a);if(p=='apply')return applyPage(a);if(p=='success')return success(a);if(p=='track')return track();home()}
 const sp=$('#sp');let seen=0;try{seen=sessionStorage.getItem('lxsp')}catch{}
-if(seen)sp.remove();else{const go=()=>{sp.classList.add('out');try{sessionStorage.setItem('lxsp',1)}catch{}setTimeout(()=>sp.remove(),700)};sp.onclick=go;setTimeout(go,2000)}
+if(seen||/^#\/?(admin|staff)/.test(location.hash))sp.remove();
+function runSplash(){if(!sp.isConnected||sp.dataset.r)return;sp.dataset.r=1;if(!S.splashOn||S.closedOn){sp.remove();return}$('#s1').textContent=S.splashT1;$('#s2').textContent=S.splashT2;$('#spi').style.display='block';const go=()=>{sp.classList.add('out');try{sessionStorage.setItem('lxsp',1)}catch{}setTimeout(()=>sp.remove(),700)};sp.onclick=go;setTimeout(go,2000)}
+function closedPage(){A.innerHTML=`<div class="w s" style="max-width:560px;text-align:center"><h1 style="font-size:clamp(30px,7vw,48px)">${esc(S.closedTitle)}</h1><p class="m" style="margin:18px 0 28px;white-space:pre-line">${esc(S.closedReason)}</p><div class="card"><h3>Contact us</h3><p class="m">${esc(S.phone)}</p><div class="bar" style="justify-content:center"><a class="b" href="${hand(S.phone)}">CALL NOW</a><a class="b o" href="${wa(S.whatsapp)}" target="_blank" rel="noopener">WHATSAPP</a></div></div></div>`}
 addEventListener('hashchange',route);route();
 </script></body></html>
